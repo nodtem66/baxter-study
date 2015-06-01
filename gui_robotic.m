@@ -58,9 +58,10 @@ function gui_robotic_OpeningFcn(hObject, eventdata, handles, varargin)
 
 handles.output = hObject;
 handles.hViewer = gui_3dviwer;
+handles.theta_L = zeros(1, 7);
+handles.theta_R = zeros(1, 7);
 % Update handles structure
 guidata(hObject, handles);
-
 
 % UIWAIT makes gui_robotic wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
@@ -311,11 +312,13 @@ global vW0_R; global vW1_L;  global vW1_R; global vW2_L; global vW2_R;
 global hS0_L;  global hS0_R; global hS1_L; global hS1_R;
 global hE0_L; global hE0_R; global hE1_L;  global hE1_R; global hW0_L;
 global hW0_R; global hW1_L;  global hW1_R; global hW2_L; global hW2_R;
-global HS0_L;  global HS0_R; global HS1_L; global HS1_R;
-global HE0_L; global HE0_R; global HE1_L;  global HE1_R; global HW0_L;
-global HW0_R; global HW1_L;  global HW1_R; global HW2_L; global HW2_R;
+global HS0_L;  global HS0_R; global HS1; global HE0; global HE1;
+global HW0; global HW1; global HW2;
 
 set(hObject, 'Enable', 'off');
+data = guidata(hObject);
+theta_R = data.theta_R;
+theta_L = data.theta_L;
 mode = get(handles.popupmenu1, 'Value');
 err = '';
 if mode == 1 % forward kinematics mode
@@ -336,15 +339,16 @@ thetaW1_R = str2double(get(handles.edit20, 'String'));
 thetaW2_R = str2double(get(handles.edit21, 'String'));
 
 % According to http://sdk.rethinkrobotics.com/wiki/Hardware_Specifications
+% however, our STL model is not match with origin one; we use custom
 % limit range of motion of each joints
-if thetaS1_L > 60 || thetaS1_L < -123
-  err = {'Theta S1 for Left arm is out of range' 'Input theta between -123 and 60'};
-elseif thetaS1_R > 60 || thetaS1_R < -123
-  err = {'Theta S1 for Right arm is out of range' 'Input theta between -123 and 60'};
-elseif thetaE1_L > 150 || thetaE1_L < -3
-  err = {'Theta E1 for Left arm is out of range' 'Input theta between -3 and 150'};
-elseif thetaE1_R > 150 || thetaE1_R < -3
-  err = {'Theta E1 for Right arm is out of range' 'Input theta between -3 and 150'};
+if thetaS1_L > 30 || thetaS1_L < -100
+  err = {'Theta S1 for Left arm is out of range' 'Input theta between -100 and 30'};
+elseif thetaS1_R > 30 || thetaS1_R < -100
+  err = {'Theta S1 for Right arm is out of range' 'Input theta between -100 and 30'};
+elseif thetaE1_L > 80 || thetaE1_L < -3
+  err = {'Theta E1 for Left arm is out of range' 'Input theta between -3 and 80'};
+elseif thetaE1_R > 80 || thetaE1_R < -3
+  err = {'Theta E1 for Right arm is out of range' 'Input theta between -3 and 80'};
 elseif thetaW1_L > 120 || thetaW1_L < -90
   err = {'Theta W1 for Left arm is out of range' 'Input theta between -90 and 120'};
 elseif thetaW1_R > 120 || thetaW1_R < -90
@@ -366,7 +370,8 @@ elseif thetaW2_L > 175.25 || thetaW2_L < -175.25
 elseif thetaW2_R > 175.25 || thetaW2_R < -175.25
   err = {'Theta W2 for Right arm is out of range' 'Input theta between -175.25 and 175.25'};
 end
-
+target_L = [thetaS0_L -thetaS1_L thetaE0_L -thetaE1_L thetaW0_L -thetaW1_L thetaW2_L];
+target_R = [-thetaS0_R -thetaS1_R thetaE0_R -thetaE1_R thetaW0_R -thetaW1_R thetaW2_R];
 if ~isempty(err)
   msgbox(err, 'Invalid Input Parameters', 'warn');
   set(hObject, 'Enable', 'on');
@@ -374,80 +379,118 @@ if ~isempty(err)
 end
 
 % start animate robot
-vvS0_L = zeros(size(vS0_L.vertices));
-vvS1_L = zeros(size(vS1_L.vertices));
-vvE0_L = zeros(size(vE0_L.vertices));
-vvE1_L = zeros(size(vE1_L.vertices));
-vvW0_L = zeros(size(vW0_L.vertices));
-vvW1_L = zeros(size(vW1_L.vertices));
-vvW2_L = zeros(size(vW2_L.vertices));
-vvS0_R = zeros(size(vS0_R.vertices));
-vvS1_R = zeros(size(vS1_R.vertices));
-vvE0_R = zeros(size(vE0_R.vertices));
-vvE1_R = zeros(size(vE1_R.vertices));
-vvW0_R = zeros(size(vW0_R.vertices));
-vvW1_R = zeros(size(vW1_R.vertices));
-vvW2_R = zeros(size(vW2_R.vertices));
-H = eye(4);
+for joint = 1:7
+  while theta_L(joint) ~= target_L(joint)
+    if abs(theta_L(joint) - target_L(joint)) < 0.5
+      theta_L(joint) = target_L(joint);
+    else
+      if theta_L(joint) > target_L(joint)
+        theta_L(joint) = theta_L(joint) - 0.5;
+      else
+        theta_L(joint) = theta_L(joint) + 0.5;
+      end
+    end
+    H = HS0_L * [rotz(theta_L(1)) [0;0;0]; 0 0 0 1];
+    h = H * [vS0_L.vertices'; ones(1,length(vS0_L.vertices))];
+    vvS0_L = h(1:3, :)';
 
-H = H * [rotz(thetaS0_L) [0;0;0]; 0 0 0 1]
-HS0_L = HS0_L * H;
-HS1_L = HS1_L * H;
-HE0_L = HE0_L * H;
-HE1_L = HE1_L * H;
-HW0_L = HW0_L * H;
-HW1_L = HW1_L * H;
-HW2_L = HW2_L * H;
-for i=1:length(vS0_L.vertices)
-  h = HS0_L * [vS0_L.vertices(i,:) 1]';
-  vvS0_L(i,:) = h(1:3, end)';
-end
-for i=1:length(vS1_L.vertices)
-  h = HS1_L * [vS1_L.vertices(i,:) 1]';
-  vvS1_L(i,:) = h(1:3,end)';
-end
-for i=1:length(vE0_L.vertices)
-  h = HE0_L * [vE0_L.vertices(i,:) 1]';
-  vvE0_L(i,:) = h(1:3,end)';
-end
-for i=1:length(vE1_L.vertices)
-  h = HE1_L * [vE1_L.vertices(i,:) 1]';
-  vvE1_L(i,:) = h(1:3,end)';
-end
-for i=1:length(vW0_L.vertices)
-  h = HW0_L * [vW0_L.vertices(i,:) 1]';
-  vvW0_L(i,:) = h(1:3,end)';
-end
-for i=1:length(vW1_L.vertices)
-  h = HW1_L * [vW1_L.vertices(i,:) 1]';
-  vvW1_L(i,:) = h(1:3,end)';
-end
-for i=1:length(vW2_L.vertices)
-  h = HW2_L * [vW2_L.vertices(i,:) 1]';
-  vvW2_L(i,:) = h(1:3,end)';
+    H = H * HS1 * [roty(theta_L(2)) [0;0;0]; 0 0 0 1];
+    h = H * [vS1_L.vertices'; ones(1,length(vS1_L.vertices))];
+    vvS1_L = h(1:3, :)';
+
+    H = H * HE0 * [rotz(theta_L(3)) [0;0;0]; 0 0 0 1];
+    h = H * [vE0_L.vertices'; ones(1,length(vE0_L.vertices))];
+    vvE0_L = h(1:3, :)';
+
+    H = H * HE1 * [roty(theta_L(4)) [0;0;0]; 0 0 0 1];
+    h = H * [vE1_L.vertices'; ones(1,length(vE1_L.vertices))];
+    vvE1_L = h(1:3, :)';
+
+    H = H * HW0 * [rotz(theta_L(5)) [0;0;0]; 0 0 0 1];
+    h = H * [vW0_L.vertices'; ones(1,length(vW0_L.vertices))];
+    vvW0_L = h(1:3, :)';
+
+    H = H * HW1 * [roty(theta_L(6)) [0;0;0]; 0 0 0 1];
+    h = H * [vW1_L.vertices'; ones(1,length(vW1_L.vertices))];
+    vvW1_L = h(1:3, :)';
+
+    H = H * HW2 * [rotz(theta_L(7)) [0;0;0]; 0 0 0 1];
+    h = H * [vW2_L.vertices'; ones(1,length(vW2_L.vertices))];
+    vvW2_L = h(1:3, :)';
+    
+    % render viewer
+    set(hS0_L, 'Vertices', vvS0_L);
+    set(hS1_L, 'Vertices', vvS1_L);
+    set(hE0_L, 'Vertices', vvE0_L);
+    set(hE1_L, 'Vertices', vvE1_L);
+    set(hW0_L, 'Vertices', vvW0_L);
+    set(hW1_L, 'Vertices', vvW1_L);
+    set(hW2_L, 'Vertices', vvW2_L);
+    % delay
+    pause(0.001);
+  end
 end
 
-set(hS0_R, 'Vertices', vS0_R.vertices);
-set(hS1_R, 'Vertices', vS1_R.vertices);
-set(hE0_R, 'Vertices', vE0_R.vertices);
-set(hE1_R, 'Vertices', vE1_R.vertices);
-set(hW0_R, 'Vertices', vW0_R.vertices);
-set(hW1_R, 'Vertices', vW1_R.vertices);
-set(hW2_R, 'Vertices', vW2_R.vertices);
+for joint = 1:7
+  while theta_R(joint) ~= target_R(joint)
+    if abs(theta_R(joint) - target_R(joint)) < 0.5
+      theta_R(joint) = target_R(joint);
+    else
+      if theta_R(joint) > target_R(joint)
+        theta_R(joint) = theta_R(joint) - 0.5;
+      else
+        theta_R(joint) = theta_R(joint) + 0.5;
+      end
+    end
+    H = HS0_R * [rotz(theta_R(1)) [0;0;0]; 0 0 0 1];
+    h = H * [vS0_R.vertices'; ones(1,length(vS0_R.vertices))];
+    vvS0_R = h(1:3, :)';
 
-set(hS0_L, 'Vertices', vvS0_L);
-set(hS1_L, 'Vertices', vvS1_L);
-set(hE0_L, 'Vertices', vvE0_L);
-set(hE1_L, 'Vertices', vvE1_L);
-set(hW0_L, 'Vertices', vvW0_L);
-set(hW1_L, 'Vertices', vvW1_L);
-set(hW2_L, 'Vertices', vvW2_L);
+    H = H * HS1 * [roty(theta_R(2)) [0;0;0]; 0 0 0 1];
+    h = H * [vS1_R.vertices'; ones(1,length(vS1_R.vertices))];
+    vvS1_R = h(1:3, :)';
 
+    H = H * HE0 * [rotz(theta_R(3)) [0;0;0]; 0 0 0 1];
+    h = H * [vE0_R.vertices'; ones(1,length(vE0_R.vertices))];
+    vvE0_R = h(1:3, :)';
+
+    H = H * HE1 * [roty(theta_R(4)) [0;0;0]; 0 0 0 1];
+    h = H * [vE1_R.vertices'; ones(1,length(vE1_R.vertices))];
+    vvE1_R = h(1:3, :)';
+
+    H = H * HW0 * [rotz(theta_R(5)) [0;0;0]; 0 0 0 1];
+    h = H * [vW0_R.vertices'; ones(1,length(vW0_R.vertices))];
+    vvW0_R = h(1:3, :)';
+
+    H = H * HW1 * [roty(theta_R(6)) [0;0;0]; 0 0 0 1];
+    h = H * [vW1_R.vertices'; ones(1,length(vW1_R.vertices))];
+    vvW1_R = h(1:3, :)';
+
+    H = H * HW2 * [rotz(theta_R(7)) [0;0;0]; 0 0 0 1];
+    h = H * [vW2_R.vertices'; ones(1,length(vW2_R.vertices))];
+    vvW2_R = h(1:3, :)';
+    
+    % render viewer
+    set(hS0_R, 'Vertices', vvS0_R);
+    set(hS1_R, 'Vertices', vvS1_R);
+    set(hE0_R, 'Vertices', vvE0_R);
+    set(hE1_R, 'Vertices', vvE1_R);
+    set(hW0_R, 'Vertices', vvW0_R);
+    set(hW1_R, 'Vertices', vvW1_R);
+    set(hW2_R, 'Vertices', vvW2_R);
+    % delay
+    pause(0.001);
+  end
+end
 
 elseif mode == 2 % inverse kinematics mode
 
 end
+
 set(hObject, 'Enable', 'on');
+data.theta_L = theta_L;
+data.theta_R = theta_R;
+guidata(hObject, data);
 
 % --- Executes on button press in pushbutton2.
 function pushbutton2_Callback(hObject, eventdata, handles)
@@ -481,6 +524,8 @@ end
 
 % open new viwer
 data.hViewer = gui_3dviwer;
+data.theta_L = zeros(1, 7);
+data.theta_R = zeros(1, 7);
 guidata(hObject, data);
 
 set(hObject, 'Enable', 'on');
