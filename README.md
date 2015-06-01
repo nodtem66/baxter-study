@@ -10,7 +10,10 @@ class project for study the [baxter robot](http://www.rethinkrobotics.com/baxter
 
 ## Class
 
->**EGBE481 Introduction to Medical Robotics**
-> Semester 2, 2014-2015
-> Department of Biomedical Engineering
-> Faculty of Engineering, Mahidol University
+**EGBE481 Introduction to Medical Robotics**
+
+Semester 2, 2014-2015
+
+Department of Biomedical Engineering
+
+Faculty of Engineering, Mahidol University

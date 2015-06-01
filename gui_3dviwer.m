@@ -22,7 +22,7 @@ function varargout = gui_3dviwer(varargin)
 
 % Edit the above text to modify the response to help gui_3dviwer
 
-% Last Modified by GUIDE v2.5 01-Jun-2015 11:01:00
+% Last Modified by GUIDE v2.5 01-Jun-2015 23:02:05
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -144,14 +144,7 @@ vW1_R.vertices = (ones(length(vW1_R.vertices), 1) * [-65.3227 -75 -65] + vW1_R.v
 vW1_L.vertices = (ones(length(vW1_L.vertices), 1) * [-65.3227 -75 -65] + vW1_L.vertices) * roty(-90);
 vW2_R.vertices = (ones(length(vW2_R.vertices), 1) * [-35 -35 0] + vW2_R.vertices) * roty(90);
 vW2_L.vertices = (ones(length(vW2_L.vertices), 1) * [-35 -35 0] + vW2_L.vertices) * roty(-90);
-%{
-vS0_R.vertices = ones(length(vS0_R.vertices), 1) * [-470 -160 58] + vS0_R.vertices;
-set(hS0_R, 'Vertices', vS0_R.vertices);
-%vS0_R.vertices = ones(length(vS0_R.vertices), 1) * [240 -160 58] + vS0_R.vertices;
-vS0_L.vertices = rotz(180) * (ones(length(vS0_L.vertices), 1) * [-115 -115 0] + vS0_L.vertices);
-vS0_L.vertices =  ones(length(vS0_L.vertices), 1) * [-355 -45 58] + ( * vS0_L.vertices')';
-set(hS0_R, 'Vertices', vS0_R.vertices);
-%}
+
 HS0_R = [1 0 0 -355; 0 1 0 -45; 0 0 1 58; 0 0 0 1]; % * [rotz(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vS0_R.vertices)
   h = HS0_R * [vS0_R.vertices(i,:) 1]';
