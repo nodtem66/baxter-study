@@ -87,6 +87,10 @@ global vW0_R; global vW1_L;  global vW1_R; global vW2_L; global vW2_R;
 global hBody; global hS0_L;  global hS0_R; global hS1_L; global hS1_R;
 global hE0_L; global hE0_R; global hE1_L;  global hE1_R; global hW0_L;
 global hW0_R; global hW1_L;  global hW1_R; global hW2_L; global hW2_R;
+global HS0_L;  global HS0_R; global HS1_L; global HS1_R;
+global HE0_L; global HE0_R; global HE1_L;  global HE1_R; global HW0_L;
+global HW0_R; global HW1_L;  global HW1_R; global HW2_L; global HW2_R;
+
 
 vBody = stlread('baxter_body.STL');
 vS0_L = stlread('S0.STL');
@@ -145,88 +149,104 @@ vW1_L.vertices = (ones(length(vW1_L.vertices), 1) * [-65.3227 -75 -65] + vW1_L.v
 vW2_R.vertices = (ones(length(vW2_R.vertices), 1) * [-35 -35 0] + vW2_R.vertices) * roty(90);
 vW2_L.vertices = (ones(length(vW2_L.vertices), 1) * [-35 -35 0] + vW2_L.vertices) * roty(-90);
 
+vvS0_L = zeros(size(vS0_L.vertices));
+vvS1_L = zeros(size(vS1_L.vertices));
+vvE0_L = zeros(size(vE0_L.vertices));
+vvE1_L = zeros(size(vE1_L.vertices));
+vvW0_L = zeros(size(vW0_L.vertices));
+vvW1_L = zeros(size(vW1_L.vertices));
+vvW2_L = zeros(size(vW2_L.vertices));
+vvS0_R = zeros(size(vS0_R.vertices));
+vvS1_R = zeros(size(vS1_R.vertices));
+vvE0_R = zeros(size(vE0_R.vertices));
+vvE1_R = zeros(size(vE1_R.vertices));
+vvW0_R = zeros(size(vW0_R.vertices));
+vvW1_R = zeros(size(vW1_R.vertices));
+vvW2_R = zeros(size(vW2_R.vertices));
+
+
 HS0_R = [1 0 0 -355; 0 1 0 -45; 0 0 1 58; 0 0 0 1]; % * [rotz(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vS0_R.vertices)
   h = HS0_R * [vS0_R.vertices(i,:) 1]';
-  vS0_R.vertices(i,:) = h(1:3, end)';
+  vvS0_R(i,:) = h(1:3, end)';
 end
 HS0_L = [1 0 0 355; 0 1 0 -45; 0 0 1 58; 0 0 0 1] * [rotz(180) [0;0;0]; 0 0 0 1];
 for i=1:length(vS0_L.vertices)
   h = HS0_L * [vS0_L.vertices(i,:) 1]';
-  vS0_L.vertices(i,:) = h(1:3, end)';
+  vvS0_L(i,:) = h(1:3, end)';
 end
 HS1_R = [1 0 0 -355; 0 1 0 -45; 0 0 1 1400; 0 0 0 1] * [roty(90) [0;0;0]; 0 0 0 1];
 for i=1:length(vS1_R.vertices)
   h = HS1_R * [vS1_R.vertices(i,:) 1]';
-  vS1_R.vertices(i,:) = h(1:3,end)';
+  vvS1_R(i,:) = h(1:3,end)';
 end
 HS1_L = [1 0 0 355; 0 1 0 -45; 0 0 1 1400; 0 0 0 1] * [roty(-90) [0;0;0]; 0 0 0 1];
 for i=1:length(vS1_L.vertices)
   h = HS1_L * [vS1_L.vertices(i,:) 1]';
-  vS1_L.vertices(i,:) = h(1:3,end)';
+  vvS1_L(i,:) = h(1:3,end)';
 end
 HE0_R = [1 0 0 -520; 0 1 0 -45; 0 0 1 1400; 0 0 0 1] * [rotx(180) [0;0;0]; 0 0 0 1];
 for i=1:length(vE0_R.vertices)
   h = HE0_R * [vE0_R.vertices(i,:) 1]';
-  vE0_R.vertices(i,:) = h(1:3,end)';
+  vvE0_R(i,:) = h(1:3,end)';
 end
 HE0_L = [1 0 0 520; 0 1 0 -45; 0 0 1 1400; 0 0 0 1]; %* [rotx(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vE0_L.vertices)
   h = HE0_L * [vE0_L.vertices(i,:) 1]';
-  vE0_L.vertices(i,:) = h(1:3,end)';
+  vvE0_L(i,:) = h(1:3,end)';
 end
 HE1_R = [1 0 0 -817.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1] * [roty(-90) [0;0;0]; 0 0 0 1];
 for i=1:length(vE1_R.vertices)
   h = HE1_R * [vE1_R.vertices(i,:) 1]';
-  vE1_R.vertices(i,:) = h(1:3,end)';
+  vvE1_R(i,:) = h(1:3,end)';
 end
 HE1_L = [1 0 0 817.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1] * [roty(90) [0;0;0]; 0 0 0 1];
 for i=1:length(vE1_L.vertices)
   h = HE1_L * [vE1_L.vertices(i,:) 1]';
-  vE1_L.vertices(i,:) = h(1:3,end)';
+  vvE1_L(i,:) = h(1:3,end)';
 end
 HW0_R = [1 0 0 -937.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1] * [rotx(180) [0;0;0]; 0 0 0 1];
 for i=1:length(vW0_R.vertices)
   h = HW0_R * [vW0_R.vertices(i,:) 1]';
-  vW0_R.vertices(i,:) = h(1:3,end)';
+  vvW0_R(i,:) = h(1:3,end)';
 end
 HW0_L = [1 0 0 937.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1]; % * [rotx(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vW0_L.vertices)
   h = HW0_L * [vW0_L.vertices(i,:) 1]';
-  vW0_L.vertices(i,:) = h(1:3,end)';
+  vvW0_L(i,:) = h(1:3,end)';
 end
 HW1_R = [1 0 0 -1356.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1]; % * [roty(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vW1_R.vertices)
   h = HW1_R * [vW1_R.vertices(i,:) 1]';
-  vW1_R.vertices(i,:) = h(1:3,end)';
+  vvW1_R(i,:) = h(1:3,end)';
 end
 HW1_L = [1 0 0 1356.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1]; % * [roty(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vW1_L.vertices)
   h = HW1_L * [vW1_L.vertices(i,:) 1]';
-  vW1_L.vertices(i,:) = h(1:3,end)';
+  vvW1_L(i,:) = h(1:3,end)';
 end
 HW2_R = [1 0 0 -1576.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1]; % * [rotx(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vW2_R.vertices)
   h = HW2_R * [vW2_R.vertices(i,:) 1]';
-  vW2_R.vertices(i,:) = h(1:3,end)';
+  vvW2_R(i,:) = h(1:3,end)';
 end
 HW2_L = [1 0 0 1576.5; 0 1 0 -45; 0 0 1 1305; 0 0 0 1]; % * [rotx(45) [0;0;0]; 0 0 0 1];
 for i=1:length(vW2_L.vertices)
   h = HW2_L * [vW2_L.vertices(i,:) 1]';
-  vW2_L.vertices(i,:) = h(1:3,end)';
+  vvW2_L(i,:) = h(1:3,end)';
 end
 
-set(hS0_R, 'Vertices', vS0_R.vertices);
-set(hS0_L, 'Vertices', vS0_L.vertices);
-set(hS1_R, 'Vertices', vS1_R.vertices);
-set(hS1_L, 'Vertices', vS1_L.vertices);
-set(hE0_R, 'Vertices', vE0_R.vertices);
-set(hE0_L, 'Vertices', vE0_L.vertices);
-set(hE1_R, 'Vertices', vE1_R.vertices);
-set(hE1_L, 'Vertices', vE1_L.vertices);
-set(hW0_R, 'Vertices', vW0_R.vertices);
-set(hW0_L, 'Vertices', vW0_L.vertices);
-set(hW1_R, 'Vertices', vW1_R.vertices);
-set(hW1_L, 'Vertices', vW1_L.vertices);
-set(hW2_R, 'Vertices', vW2_R.vertices);
-set(hW2_L, 'Vertices', vW2_L.vertices);
+set(hS0_R, 'Vertices', vvS0_R);
+set(hS0_L, 'Vertices', vvS0_L);
+set(hS1_R, 'Vertices', vvS1_R);
+set(hS1_L, 'Vertices', vvS1_L);
+set(hE0_R, 'Vertices', vvE0_R);
+set(hE0_L, 'Vertices', vvE0_L);
+set(hE1_R, 'Vertices', vvE1_R);
+set(hE1_L, 'Vertices', vvE1_L);
+set(hW0_R, 'Vertices', vvW0_R);
+set(hW0_L, 'Vertices', vvW0_L);
+set(hW1_R, 'Vertices', vvW1_R);
+set(hW1_L, 'Vertices', vvW1_L);
+set(hW2_R, 'Vertices', vvW2_R);
+set(hW2_L, 'Vertices', vvW2_L);
