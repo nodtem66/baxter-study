@@ -24,7 +24,7 @@ function varargout = gui_robotic(varargin)
 
 % Edit the above text to modify the response to help gui_robotic
 
-% Last Modified by GUIDE v2.5 01-Jun-2015 21:34:57
+% Last Modified by GUIDE v2.5 03-Jun-2015 10:52:19
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -60,6 +60,8 @@ handles.output = hObject;
 handles.hViewer = gui_3dviwer;
 handles.theta_L = zeros(1, 7);
 handles.theta_R = zeros(1, 7);
+handles.itheta_L = zeros(1,7);
+handles.itheta_R = zeros(1,7);
 % Update handles structure
 guidata(hObject, handles);
 
@@ -313,12 +315,17 @@ global hS0_L;  global hS0_R; global hS1_L; global hS1_R;
 global hE0_L; global hE0_R; global hE1_L;  global hE1_R; global hW0_L;
 global hW0_R; global hW1_L;  global hW1_R; global hW2_L; global hW2_R;
 global HS0_L;  global HS0_R; global HS1; global HE0; global HE1;
-global HW0; global HW1; global HW2;
+global HW0; global HW1; global HW2; global hTarget; global HEndEff;
+global htextLeft; global htextRight; global HEND;
 
 set(hObject, 'Enable', 'off');
 data = guidata(hObject);
 theta_R = data.theta_R;
 theta_L = data.theta_L;
+itheta_R = data.itheta_R;
+itheta_L = data.itheta_L;
+enable_L = get(handles.checkbox1, 'Value');
+enable_R = get(handles.checkbox2, 'Value');
 mode = get(handles.popupmenu1, 'Value');
 err = '';
 if mode == 1 % forward kinematics mode
@@ -370,8 +377,8 @@ elseif thetaW2_L > 175.25 || thetaW2_L < -175.25
 elseif thetaW2_R > 175.25 || thetaW2_R < -175.25
   err = {'Theta W2 for Right arm is out of range' 'Input theta between -175.25 and 175.25'};
 end
-target_L = [thetaS0_L -thetaS1_L thetaE0_L -thetaE1_L thetaW0_L -thetaW1_L thetaW2_L];
-target_R = [-thetaS0_R -thetaS1_R thetaE0_R -thetaE1_R thetaW0_R -thetaW1_R thetaW2_R];
+target_L = [thetaS0_L thetaS1_L thetaE0_L thetaE1_L thetaW0_L thetaW1_L thetaW2_L];
+target_R = [thetaS0_R thetaS1_R thetaE0_R thetaE1_R thetaW0_R thetaW1_R thetaW2_R];
 if ~isempty(err)
   msgbox(err, 'Invalid Input Parameters', 'warn');
   set(hObject, 'Enable', 'on');
@@ -417,6 +424,9 @@ for joint = 1:7
     H = H * HW2 * [rotz(theta_L(7)) [0;0;0]; 0 0 0 1];
     h = H * [vW2_L.vertices'; ones(1,length(vW2_L.vertices))];
     vvW2_L = h(1:3, :)';
+    H = H * HEND;
+    HEndEff(2, :) = H(1:3, end)';
+    
     
     % render viewer
     set(hS0_L, 'Vertices', vvS0_L);
@@ -426,8 +436,9 @@ for joint = 1:7
     set(hW0_L, 'Vertices', vvW0_L);
     set(hW1_L, 'Vertices', vvW1_L);
     set(hW2_L, 'Vertices', vvW2_L);
+    set(htextLeft, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(2, 1), HEndEff(2, 2), HEndEff(2, 3)));
     % delay
-    pause(0.001);
+    pause(0.0001);
   end
 end
 
@@ -442,7 +453,7 @@ for joint = 1:7
         theta_R(joint) = theta_R(joint) + 0.5;
       end
     end
-    H = HS0_R * [rotz(theta_R(1)) [0;0;0]; 0 0 0 1];
+    H = HS0_R * [rotz(-theta_R(1)) [0;0;0]; 0 0 0 1];
     h = H * [vS0_R.vertices'; ones(1,length(vS0_R.vertices))];
     vvS0_R = h(1:3, :)';
 
@@ -469,6 +480,8 @@ for joint = 1:7
     H = H * HW2 * [rotz(theta_R(7)) [0;0;0]; 0 0 0 1];
     h = H * [vW2_R.vertices'; ones(1,length(vW2_R.vertices))];
     vvW2_R = h(1:3, :)';
+    H = H * HEND;
+    HEndEff(1, :) = H(1:3, end)';
     
     % render viewer
     set(hS0_R, 'Vertices', vvS0_R);
@@ -478,18 +491,618 @@ for joint = 1:7
     set(hW0_R, 'Vertices', vvW0_R);
     set(hW1_R, 'Vertices', vvW1_R);
     set(hW2_R, 'Vertices', vvW2_R);
+    set(htextRight, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(1, 1), HEndEff(1, 2), HEndEff(1, 3)));
     % delay
-    pause(0.001);
+    pause(0.0001);
   end
 end
 
-elseif mode == 2 % inverse kinematics mode
+%save data
+data.theta_L = theta_L;
+data.theta_R = theta_R;
 
+elseif mode == 2 % inverse kinematics mode
+  lx = str2double(get(handles.editlx, 'String'));
+  ly = str2double(get(handles.editly, 'String'));
+  lz = str2double(get(handles.editlz, 'String'));
+
+  rx = str2double(get(handles.editrx, 'String'));
+  ry = str2double(get(handles.editry, 'String'));
+  rz = str2double(get(handles.editrz, 'String'));
+  set(hTarget(1), 'XData', lx, 'YData', ly, 'ZData', lz);
+  set(hTarget(2), 'XData', rx, 'YData', ry, 'ZData', rz);
+  
+  % Inverse Kinamatics: CCD with Triangulation
+  % Ref: R. Muller-Cajar and R. Mukundan. 2007. Triangulation: A new algorithm
+  % for Inverse Kinematics. University of Canterbury. New Zealand
+  
+  %% Left arm
+  if enable_L
+  p_target = [lx ly lz];
+  C = zeros(7, 3); % store c vector of each joint for target direction
+  P = zeros(8, 3); % store position vector (p) of each joint
+  H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1];
+  P(1, :) = H(1:3, end)';
+  H = H * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1];
+  P(2, :) = H(1:3, end)';
+  H = H * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1];
+  P(3, :) = H(1:3, end)';
+  H = H * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1];
+  P(4, :) = H(1:3, end)';
+  H = H * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1];
+  P(5, :) = H(1:3, end)';
+  H = H * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1];
+  P(6, :) = H(1:3, end)';
+  H = H * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+  P(7, :) = H(1:3, end)';
+  P(8, :) = H(1:3, end)';
+  
+  C = ones(8,1) * p_target - P;
+  joint = 7;
+  iter_L = 0;
+  stiff = 1;
+  alpha = 1;
+  err_L = norm(P(7,:)-p_target);
+  while err_L > 0.01
+    if  err_L < 10
+      stiff = 0.1;
+    elseif err_L < 50
+      stiff = 0.25;
+    elseif err_L < 200
+      stiff = 0.5;
+    end
+    joint = joint - 1;
+    if joint < 1
+      joint = 6;
+    end
+    iter_L = iter_L + 1;
+    if iter_L > 10000
+      break;
+    end
+      
+    a_vector = P(8, :) - P(joint, :);
+    c_vector = C(joint, :);
+    
+    a = norm(a_vector);
+    c = norm(c_vector);
+   
+    axis = [0 0 0];
+    if joint == 1
+      axis = [0 0 1];
+    elseif joint == 2 || joint == 4 || joint == 6
+      axis = [0 1 0];
+    elseif joint == 3 || joint == 5 || joint == 7
+      axis = [1 0 0];
+    end
+    
+    wp = 1;
+    k1 = wp * (c_vector * axis') * (a_vector * axis');
+    k2 = wp * (a_vector * c_vector');
+    k3 = axis * (wp * cross(a_vector, c_vector)');
+    theta = atand(k3 / (k2 - k1));
+    theta_1 = theta + 180;
+    theta_2 = theta - 180;
+    
+    old_theta = itheta_L(joint);
+    itheta_L(joint) = itheta_L(joint) + stiff * theta;
+    H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end0 = H(1:3, end)';
+    itheta_L(joint) = old_theta;
+    
+    if theta_1 > -180 && theta_1 < 180
+      old_theta = itheta_L(joint);
+      itheta_L(joint) = itheta_L(joint) + stiff * theta_1;
+      H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = H(1:3, end)';
+      if norm(p_target - p_end) < norm(p_target - p_end0)
+        p_end0 = p_end;
+        theta = theta_1;
+      end
+    itheta_L(joint) = old_theta;
+    end
+    if theta_2 > -180 && theta_2 < 180
+      old_theta = itheta_L(joint);
+      itheta_L(joint) = itheta_L(joint) + stiff * theta_2;
+      H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = H(1:3, end)';
+      if norm(p_target - p_end) < norm(p_target - p_end0)
+        p_end0 = p_end;
+        theta = theta_2;
+      end
+      itheta_L(joint) = old_theta;
+    end
+    
+    % Convergenece Checkpoint
+    div_err = norm(p_target - p_end0) - err_L;
+    if div_err > 0
+      stiff = 0.005;
+    end
+    
+    % Update each joint with theta
+    itheta_L(joint) = itheta_L(joint) + stiff * theta;
+    
+    if itheta_L(1) > 51
+      itheta_L(1) = 51;
+    elseif itheta_L(1) < -141
+      itheta_L(1) = -141;
+    elseif itheta_L(2) > 30
+      itheta_L(2) = 30;
+    elseif itheta_L(2) < -100
+      itheta_L(2) = -100;
+    elseif itheta_L(3) > 173.5
+      itheta_L(3) = 173.5;
+    elseif itheta_L(3) < -173.5
+      itheta_L(3) = -173.5;
+    elseif itheta_L(4) > 80
+      itheta_L(4) = 80;
+    elseif itheta_L(4) < -3
+      itheta_L(4) = -3;
+    elseif itheta_L(5) > 175.25
+      itheta_L(5) = 175.25;
+    elseif itheta_L(5) < -175.25
+      itheta_L(5) = -175.25;
+    elseif itheta_L(6) > 120
+      itheta_L(6) = 120;
+    elseif itheta_L(6) < -90
+      itheta_L(6) = -90;
+    elseif itheta_L(7) > 175.25
+      itheta_L(7) = 175.25;
+    elseif itheta_L(7) < -175.25
+      itheta_L(7) = -175.25;
+    end
+    
+    % update kinametics
+    H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1];
+    P(1, :) = H(1:3, end)';
+    H = H * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1];
+    P(2, :) = H(1:3, end)';
+    H = H * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1];
+    P(3, :) = H(1:3, end)';
+    H = H * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1];
+    P(4, :) = H(1:3, end)';
+    H = H * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1];
+    P(5, :) = H(1:3, end)';
+    H = H * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1];
+    P(6, :) = H(1:3, end)';
+    H = H * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+    P(7, :) = H(1:3, end)';
+    P(8, :) = H(1:3, end)';
+
+    C = ones(8,1) * p_target - P;
+    % update error
+    err_L = norm(P(7,:)-p_target);
+  end
+  data.itheta_L = itheta_L;
+ 
+  end
+  %% for Right arm
+  if enable_R
+  p_target = [rx ry rz];
+  C = zeros(7, 3); % store c vector of each joint for target direction
+  P = zeros(8, 3); % store position vector (p) of each joint
+  H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1];
+  P(1, :) = H(1:3, end)';
+  H = H * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1];
+  P(2, :) = H(1:3, end)';
+  H = H * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1];
+  P(3, :) = H(1:3, end)';
+  H = H * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1];
+  P(4, :) = H(1:3, end)';
+  H = H * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1];
+  P(5, :) = H(1:3, end)';
+  H = H * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1];
+  P(6, :) = H(1:3, end)';
+  H = H * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+  P(7, :) = H(1:3, end)';
+  P(8, :) = H(1:3, end)';
+  
+  C = ones(8,1) * p_target - P;
+  joint = 7;
+  iter_R = 0;
+  stiff = 1;
+  err_R = norm(P(7,:)-p_target);
+  while err_R > 0.01
+    if  err_R < 10
+      stiff = 0.1;
+    elseif err_R < 50
+      stiff = 0.25;
+    elseif err_R < 200
+      stiff = 0.5;
+    end
+    joint = joint - 1;
+    if joint < 1
+      joint = 6;
+    end
+    iter_R = iter_R + 1;
+    if iter_R > 10000
+      break;
+    end
+      
+    a_vector = P(8, :) - P(joint, :);
+    c_vector = C(joint, :);
+    
+    a = norm(a_vector);
+    c = norm(c_vector);
+   
+    axis = [0 0 0];
+    if joint == 1
+      axis = [0 0 1];
+    elseif joint == 2 || joint == 4 || joint == 6
+      axis = [0 1 0];
+    elseif joint == 3 || joint == 5 || joint == 7
+      axis = [1 0 0];
+    end
+    
+    k1 = (c_vector * axis') * (a_vector * axis');
+    k2 = a_vector * c_vector';
+    k3 = axis * cross(a_vector, c_vector)';
+    theta = atand(k3 / (k2 - k1));
+    theta_1 = theta + 180;
+    theta_2 = theta - 180;
+    
+    % select the best theta
+    old_theta = itheta_R(joint);
+    itheta_R(joint) = itheta_R(joint) + stiff * theta;
+    H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end0 = H(1:3, end)';
+    itheta_R(joint) = old_theta;
+    
+    if theta_1 > -180 && theta_1 < 180
+      old_theta = itheta_R(joint);
+      itheta_R(joint) = itheta_R(joint) + stiff * theta_1;
+      H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = H(1:3, end)';
+      if norm(p_target - p_end) < norm(p_target - p_end0)
+        p_end0 = p_end;
+        theta = theta_1;
+      end
+    itheta_R(joint) = old_theta;
+    end
+    if theta_2 > -180 && theta_2 < 180
+      old_theta = itheta_R(joint);
+      itheta_R(joint) = itheta_R(joint) + stiff * theta_2;
+      H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
+    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
+    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
+    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
+    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
+    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
+    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = H(1:3, end)';
+      if norm(p_target - p_end) < norm(p_target - p_end0)
+        theta = theta_2;
+        p_end0 = p_end;
+      end
+      itheta_R(joint) = old_theta;
+    end
+    
+    % Convergenece Checkpoint
+    div_err = norm(p_target - p_end0) - err_R;
+    if div_err > 0
+      stiff = 0.005;
+    end
+    
+    % update each joint with theta
+    itheta_R(joint) = itheta_R(joint) + stiff * theta;
+    
+    if itheta_R(1) > 51
+      itheta_R(1) = 51;
+    elseif itheta_R(1) < -141
+      itheta_R(1) = -141;
+    elseif itheta_R(2) > 30
+      itheta_R(2) = 30;
+    elseif itheta_R(2) < -100
+      itheta_R(2) = -100;
+    elseif itheta_R(3) > 173.5
+      itheta_R(3) = 173.5;
+    elseif itheta_R(3) < -173.5
+      itheta_R(3) = -173.5;
+    elseif itheta_R(4) > 80
+      itheta_R(4) = 80;
+    elseif itheta_R(4) < -3
+      itheta_R(4) = -3;
+    elseif itheta_R(5) > 175.25
+      itheta_R(5) = 175.25;
+    elseif itheta_R(5) < -175.25
+      itheta_R(5) = -175.25;
+    elseif itheta_R(6) > 120
+      itheta_R(6) = 120;
+    elseif itheta_R(6) < -90
+      itheta_R(6) = -90;
+    elseif itheta_R(7) > 175.25
+      itheta_R(7) = 175.25;
+    elseif itheta_R(7) < -175.25
+      itheta_R(7) = -175.25;
+    end
+    
+    % update kinametics
+    H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1];
+    P(1, :) = H(1:3, end)';
+    H = H * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1];
+    P(2, :) = H(1:3, end)';
+    H = H * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1];
+    P(3, :) = H(1:3, end)';
+    H = H * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1];
+    P(4, :) = H(1:3, end)';
+    H = H * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1];
+    P(5, :) = H(1:3, end)';
+    H = H * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1];
+    P(6, :) = H(1:3, end)';
+    H = H * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+    P(7, :) = H(1:3, end)';
+    P(8, :) = H(1:3, end)';
+
+    C = ones(8,1) * p_target - P;
+    % update error
+    err_R = norm(P(7,:)-p_target);
+  end
+  data.itheta_R = itheta_R;
+  end
+  
+  %% Post Processing
+  % If right arm found IK solution; render animation
+  if enable_L % && err_L < 0.1
+  set(handles.editl1, 'String', num2str(itheta_L(1)));
+  set(handles.editl2, 'String', num2str(itheta_L(2)));
+  set(handles.editl3, 'String', num2str(itheta_L(3)));
+  set(handles.editl4, 'String', num2str(itheta_L(4)));
+  set(handles.editl5, 'String', num2str(itheta_L(5)));
+  set(handles.editl6, 'String', num2str(itheta_L(6)));
+  set(handles.editl7, 'String', num2str(itheta_L(7)));
+  target_L = itheta_L;
+  % start animate robot
+  for joint = 1:7
+    while theta_L(joint) ~= target_L(joint)
+      if abs(theta_L(joint) - target_L(joint)) < 0.5
+        theta_L(joint) = target_L(joint);
+      else
+        if theta_L(joint) > target_L(joint)
+          theta_L(joint) = theta_L(joint) - 0.5;
+        else
+          theta_L(joint) = theta_L(joint) + 0.5;
+        end
+      end
+      H = HS0_L * [rotz(theta_L(1)) [0;0;0]; 0 0 0 1];
+      h = H * [vS0_L.vertices'; ones(1,length(vS0_L.vertices))];
+      vvS0_L = h(1:3, :)';
+
+      H = H * HS1 * [roty(theta_L(2)) [0;0;0]; 0 0 0 1];
+      h = H * [vS1_L.vertices'; ones(1,length(vS1_L.vertices))];
+      vvS1_L = h(1:3, :)';
+
+      H = H * HE0 * [rotz(theta_L(3)) [0;0;0]; 0 0 0 1];
+      h = H * [vE0_L.vertices'; ones(1,length(vE0_L.vertices))];
+      vvE0_L = h(1:3, :)';
+
+      H = H * HE1 * [roty(theta_L(4)) [0;0;0]; 0 0 0 1];
+      h = H * [vE1_L.vertices'; ones(1,length(vE1_L.vertices))];
+      vvE1_L = h(1:3, :)';
+
+      H = H * HW0 * [rotz(theta_L(5)) [0;0;0]; 0 0 0 1];
+      h = H * [vW0_L.vertices'; ones(1,length(vW0_L.vertices))];
+      vvW0_L = h(1:3, :)';
+
+      H = H * HW1 * [roty(theta_L(6)) [0;0;0]; 0 0 0 1];
+      h = H * [vW1_L.vertices'; ones(1,length(vW1_L.vertices))];
+      vvW1_L = h(1:3, :)';
+
+      H = H * HW2 * [rotz(theta_L(7)) [0;0;0]; 0 0 0 1];
+      h = H * [vW2_L.vertices'; ones(1,length(vW2_L.vertices))];
+      vvW2_L = h(1:3, :)';
+      H = H * HEND;
+      HEndEff(2, :) = H(1:3, end)';
+
+
+      % render viewer
+      set(hS0_L, 'Vertices', vvS0_L);
+      set(hS1_L, 'Vertices', vvS1_L);
+      set(hE0_L, 'Vertices', vvE0_L);
+      set(hE1_L, 'Vertices', vvE1_L);
+      set(hW0_L, 'Vertices', vvW0_L);
+      set(hW1_L, 'Vertices', vvW1_L);
+      set(hW2_L, 'Vertices', vvW2_L);
+      set(htextLeft, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(2, 1), HEndEff(2, 2), HEndEff(2, 3)));
+      % delay
+      pause(0.0001);
+    end
+  end
+  data.theta_L = theta_L;
+  end
+  
+  % If right arm found IK solution; render animation
+  if enable_R %&& err_R < 0.1
+  set(handles.edit15, 'String', num2str(itheta_R(1)));
+  set(handles.edit16, 'String', num2str(itheta_R(2)));
+  set(handles.edit17, 'String', num2str(itheta_R(3)));
+  set(handles.edit18, 'String', num2str(itheta_R(4)));
+  set(handles.edit19, 'String', num2str(itheta_R(5)));
+  set(handles.edit20, 'String', num2str(itheta_R(6)));
+  set(handles.edit21, 'String', num2str(itheta_R(7)));
+  target_R = itheta_R;
+  for joint = 1:7
+  while theta_R(joint) ~= target_R(joint)
+    if abs(theta_R(joint) - target_R(joint)) < 0.5
+      theta_R(joint) = target_R(joint);
+    else
+      if theta_R(joint) > target_R(joint)
+        theta_R(joint) = theta_R(joint) - 0.5;
+      else
+        theta_R(joint) = theta_R(joint) + 0.5;
+      end
+    end
+    H = HS0_R * [rotz(-theta_R(1)) [0;0;0]; 0 0 0 1];
+    h = H * [vS0_R.vertices'; ones(1,length(vS0_R.vertices))];
+    vvS0_R = h(1:3, :)';
+
+    H = H * HS1 * [roty(theta_R(2)) [0;0;0]; 0 0 0 1];
+    h = H * [vS1_R.vertices'; ones(1,length(vS1_R.vertices))];
+    vvS1_R = h(1:3, :)';
+
+    H = H * HE0 * [rotz(theta_R(3)) [0;0;0]; 0 0 0 1];
+    h = H * [vE0_R.vertices'; ones(1,length(vE0_R.vertices))];
+    vvE0_R = h(1:3, :)';
+
+    H = H * HE1 * [roty(theta_R(4)) [0;0;0]; 0 0 0 1];
+    h = H * [vE1_R.vertices'; ones(1,length(vE1_R.vertices))];
+    vvE1_R = h(1:3, :)';
+
+    H = H * HW0 * [rotz(theta_R(5)) [0;0;0]; 0 0 0 1];
+    h = H * [vW0_R.vertices'; ones(1,length(vW0_R.vertices))];
+    vvW0_R = h(1:3, :)';
+
+    H = H * HW1 * [roty(theta_R(6)) [0;0;0]; 0 0 0 1];
+    h = H * [vW1_R.vertices'; ones(1,length(vW1_R.vertices))];
+    vvW1_R = h(1:3, :)';
+
+    H = H * HW2 * [rotz(theta_R(7)) [0;0;0]; 0 0 0 1];
+    h = H * [vW2_R.vertices'; ones(1,length(vW2_R.vertices))];
+    vvW2_R = h(1:3, :)';
+    H = H * HEND;
+    HEndEff(1, :) = H(1:3, end)';
+    
+    % render viewer
+    set(hS0_R, 'Vertices', vvS0_R);
+    set(hS1_R, 'Vertices', vvS1_R);
+    set(hE0_R, 'Vertices', vvE0_R);
+    set(hE1_R, 'Vertices', vvE1_R);
+    set(hW0_R, 'Vertices', vvW0_R);
+    set(hW1_R, 'Vertices', vvW1_R);
+    set(hW2_R, 'Vertices', vvW2_R);
+    set(htextRight, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(1, 1), HEndEff(1, 2), HEndEff(1, 3)));
+    % delay
+    pause(0.0001);
+    end
+  end
+  data.theta_R = theta_R;
+  end 
+  
+  if enable_L
+  msgbox({'LEFT ARM' sprintf('Number of Iterations: %d', iter_L) ...
+    sprintf('error: %f', err_L) ...
+    }, 'Result');
+  end
+  if enable_R
+    msgbox({'RIGHT ARM' sprintf('Number of Iterations: %d', iter_R) ...
+    sprintf('error: %f', err_R) ...
+    }, 'Result');
+  end
+  % Jacobian Transpose method
+  % Calculate Xd Xc
+  % q is theta vector of each join
+  %{
+  q = theta_L';
+  Pd = [lx ly lz 0 0 1];
+  Pj = zeros(8,3);
+  axes = zeros(8,3);
+  Hc = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
+  Pj(1,:) = Hc(1:3, end)';
+  axes(1,:) = Hc(1:3, 3);
+  Hc = Hc * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
+  Pj(2,:) = Hc(1:3, end)';
+  axes(2,:) = Hc(1:3, 2);
+  Hc = Hc * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
+  Pj(3,:) = Hc(1:3, end)';
+  axes(3,:) = Hc(1:3, 3);
+  Hc = Hc * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
+  Pj(4,:) = Hc(1:3, end)';
+  axes(4,:) = Hc(1:3, 2);
+  Hc = Hc * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
+  Pj(5,:) = Hc(1:3, end)';
+  axes(5,:) = Hc(1:3, 3);
+  Hc = Hc * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
+  Pj(6,:) = Hc(1:3, end)';
+  axes(6,:) = Hc(1:3, 2);
+  Hc = Hc * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
+  Pj(7,:) = Hc(1:3, end)';
+  Pj(8,:) = Hc(1:3, end)';
+  axes(7,:) = Hc(1:3, 3);
+  axes(8,:) = Hc(1:3, 3);
+  
+  Pc = [Hc(1,end) Hc(2,end) Hc(3,end) Hc(1,3) Hc(2,3) Hc(3,3)];
+  F = 0.01 * (Pd - Pc);
+  iter = 0;
+  h = 1;
+  while any(F > 1e-3)
+  iter = iter + 1;
+  if iter > 10000
+    fprintf('no solution with in %d iterations\n', iter);
+    break;
+  end
+  J = [cross(Pj(7,:)-Pj(1,:), axes(1,:))' cross(Pj(7,:)-Pj(2,:), axes(2,:))' cross(Pj(7,:)-Pj(3,:), axes(3,:))' ...
+    cross(Pj(7,:)-Pj(4,:), axes(4,:))' cross(Pj(7,:)-Pj(5,:), axes(5,:))' cross(Pj(7,:)-Pj(6,:), axes(6,:))' ...
+    cross(Pj(7,:)-Pj(7,:), axes(7,:))'; ...
+    axes(1,:)' axes(2,:)' axes(3,:)' axes(4,:)' axes(5,:)' axes(6,:)' axes(7,:)']
+  L = diff(Pj);
+  alpha = [1 2 10 3 10 3 20];
+  alpha = alpha ./ sum(alpha);
+  K = 1 ./ [norm(L(1,:))*alpha(1) norm(L(2,:))*alpha(2) norm(L(3,:))*alpha(3) ...
+    norm(L(4,:))*alpha(4) norm(L(5,:))*alpha(5) norm(L(6,:))*alpha(6) 100*alpha(7)]'
+  delta_q = K .* (J'*F');
+  h = h * (1e-3/norm(F))^(.2);
+  q = q + h * delta_q;
+  break;
+  Hc = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
+  Pj(1,:) = Hc(1:3, end)';
+  axes(1,:) = Hc(1:3, 3);
+  Hc = Hc * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
+  Pj(2,:) = Hc(1:3, end)';
+  axes(2,:) = Hc(1:3, 2);
+  Hc = Hc * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
+  Pj(3,:) = Hc(1:3, end)';
+  axes(3,:) = Hc(1:3, 3);
+  Hc = Hc * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
+  Pj(4,:) = Hc(1:3, end)';
+  axes(4,:) = Hc(1:3, 2);
+  Hc = Hc * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
+  Pj(5,:) = Hc(1:3, end)';
+  axes(5,:) = Hc(1:3, 3);
+  Hc = Hc * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
+  Pj(6,:) = Hc(1:3, end)';
+  axes(6,:) = Hc(1:3, 2);
+  Hc = Hc * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
+  Pj(7,:) = Hc(1:3, end)';
+  Pj(8,:) = Hc(1:3, end)';
+  axes(7,:) = Hc(1:3, 3);
+  axes(8,:) = Hc(1:3, 3);
+  
+  Pc = [Hc(1,end) Hc(2,end) Hc(3,end) Hc(1,3) Hc(2,3) Hc(3,3)];
+  F = Pd - Pc;
+  end
+  q
+  %}
 end
 
 set(hObject, 'Enable', 'on');
-data.theta_L = theta_L;
-data.theta_R = theta_R;
 guidata(hObject, data);
 
 % --- Executes on button press in pushbutton2.
@@ -698,13 +1311,15 @@ function ViewerButton_Callback(hObject, eventdata, handles)
 data = guidata(hObject);
 
 % close the old viwer
-if ishandle(data.hViewer)
-  delete(data.hViewer);
+if isfield(data, 'hWorkspace')
+if ishandle(data.hWorkspace)
+  delete(data.hWorkspace);
+end
 end
 
 
 % open new viwer
-data.hViewer = gui_3dviwer;
+data.hWorkspace = gui_workspace;
 guidata(hObject, data);
 
 
@@ -874,3 +1489,45 @@ function edit21_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+% --- Executes on button press in pushbutton7.
+function pushbutton7_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton7 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+global hTarget;
+lx = str2double(get(handles.editlx, 'String'));
+ly = str2double(get(handles.editly, 'String'));
+lz = str2double(get(handles.editlz, 'String'));
+
+rx = str2double(get(handles.editrx, 'String'));
+ry = str2double(get(handles.editry, 'String'));
+rz = str2double(get(handles.editrz, 'String'));
+set(hTarget(1), 'XData', [lx], 'YData', [ly], 'ZData', [lz]);
+set(hTarget(2), 'XData', [rx], 'YData', [ry], 'ZData', [rz]);
+
+
+% --- Executes on button press in pushbutton8.
+function pushbutton8_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton8 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+% --- Executes on button press in checkbox1.
+function checkbox1_Callback(hObject, eventdata, handles)
+% hObject    handle to checkbox1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of checkbox1
+
+
+% --- Executes on button press in checkbox2.
+function checkbox2_Callback(hObject, eventdata, handles)
+% hObject    handle to checkbox2 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of checkbox2

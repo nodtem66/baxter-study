@@ -22,7 +22,7 @@ function varargout = gui_3dviwer(varargin)
 
 % Edit the above text to modify the response to help gui_3dviwer
 
-% Last Modified by GUIDE v2.5 01-Jun-2015 23:02:05
+% Last Modified by GUIDE v2.5 02-Jun-2015 11:50:37
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -87,9 +87,10 @@ global vW0_R; global vW1_L;  global vW1_R; global vW2_L; global vW2_R;
 global hBody; global hS0_L;  global hS0_R; global hS1_L; global hS1_R;
 global hE0_L; global hE0_R; global hE1_L;  global hE1_R; global hW0_L;
 global hW0_R; global hW1_L;  global hW1_R; global hW2_L; global hW2_R;
+global hTarget; global HEND;
 global HS0_L;  global HS0_R; global HS1; global HE0; global HE1;
-global HW0; global HW1; global HW2;
-
+global HW0; global HW1; global HW2; global HEndEff;
+global htextLeft; global htextRight;
 
 vBody = stlread('baxter_body.STL');
 vS0_L = stlread('S0.STL');
@@ -122,7 +123,10 @@ hW1_L = patch(vW1_L, 'FaceColor', [0.2 0.2 0.2], 'EdgeColor', 'none');
 hW1_R = patch(vW1_R, 'FaceColor', [0.2 0.2 0.2], 'EdgeColor', 'none');
 hW2_L = patch(vW2_L, 'FaceColor', [0.2 0.8 0.2], 'EdgeColor', 'none');
 hW2_R = patch(vW2_R, 'FaceColor', [0.2 0.8 0.2], 'EdgeColor', 'none');
-
+hold on;
+hTarget = [0 0];
+hTarget(1) = plot3(0,0,0,'y.', 'MarkerSize', 30);
+hTarget(2) = plot3(0,0,0,'r.', 'MarkerSize', 30);
 % Light and Default View
 camlight('headlight');
 material('dull');
@@ -133,8 +137,8 @@ grid on;
 % translation / rotate to normal position
 vBody.vertices = ones(length(vBody.vertices), 1) * [-500 -500 0] +  vBody.vertices;
 set(hBody, 'Vertices', vBody.vertices);
-vS0_R.vertices = ones(length(vS0_R.vertices), 1) * [-115 -115 0] + vS0_R.vertices;
-vS0_L.vertices = ones(length(vS0_L.vertices), 1) * [-115 -115 0] + vS0_L.vertices;
+vS0_R.vertices = ones(length(vS0_R.vertices), 1) * [-115 -115 -1082] + vS0_R.vertices;
+vS0_L.vertices = ones(length(vS0_L.vertices), 1) * [-115 -115 -1082] + vS0_L.vertices;
 vS1_R.vertices = ones(length(vS1_R.vertices), 1) * [-115 -140 -174.87] + vS1_R.vertices;
 vS1_L.vertices = ones(length(vS1_L.vertices), 1) * [-115 -140 -174.87] + vS1_L.vertices;
 vE0_R.vertices = (ones(length(vE0_R.vertices), 1) * [-124.6191 -121.9409 0] + vE0_R.vertices) * rotx(180);
@@ -148,29 +152,16 @@ vW1_L.vertices = (ones(length(vW1_L.vertices), 1) * [-65.3227 -75 -65] + vW1_L.v
 vW2_R.vertices = (ones(length(vW2_R.vertices), 1) * [-35 -35 0] + vW2_R.vertices);
 vW2_L.vertices = (ones(length(vW2_L.vertices), 1) * [-35 -35 0] + vW2_L.vertices);
 
-vvS0_L = zeros(size(vS0_L.vertices));
-vvS1_L = zeros(size(vS1_L.vertices));
-vvE0_L = zeros(size(vE0_L.vertices));
-vvE1_L = zeros(size(vE1_L.vertices));
-vvW0_L = zeros(size(vW0_L.vertices));
-vvW1_L = zeros(size(vW1_L.vertices));
-vvW2_L = zeros(size(vW2_L.vertices));
-vvS0_R = zeros(size(vS0_R.vertices));
-vvS1_R = zeros(size(vS1_R.vertices));
-vvE0_R = zeros(size(vE0_R.vertices));
-vvE1_R = zeros(size(vE1_R.vertices));
-vvW0_R = zeros(size(vW0_R.vertices));
-vvW1_R = zeros(size(vW1_R.vertices));
-vvW2_R = zeros(size(vW2_R.vertices));
 
-
-HS0_R = [1 0 0 -355; 0 1 0 -45; 0 0 1 58; 0 0 0 1];
-HS1 = [0 0 1 0; 0 1 0 0; -1 0 0 1342; 0 0 0 1];
+HS0_L = [-1 0 0 355; 0 -1 0 -45; 0 0 1 1140; 0 0 0 1];
+HS0_R = [1 0 0 -355; 0 1 0 -45; 0 0 1 1140; 0 0 0 1];
+HS1 = [0 0 1 0; 0 1 0 0; -1 0 0 260; 0 0 0 1];
 HE0 = [1 0 0 0; 0 1 0 0; 0 0 1 -165; 0 0 0 1];
 HE1 = [-1 0 0 95; 0 1 0 0; 0 0 -1 -297.5; 0 0 0 1];
 HW0 = [1 0 0 0; 0 1 0 0; 0 0 1 120; 0 0 0 1];
 HW1 = [1 0 0 0; 0 1 0 0; 0 0 1 419; 0 0 0 1];
 HW2 = [1 0 0 0; 0 1 0 0; 0 0 1 220; 0 0 0 1];
+HEND = [1 0 0 0; 0 1 0 0; 0 0 1 130; 0 0 0 1];
 %{
 for i=1:length(vS0_R.vertices)
   h = HS0_R * [vS0_R.vertices(i,:) 1]';
@@ -204,7 +195,10 @@ H = H * HW2;
 h = H * [vW2_R.vertices'; ones(1,length(vW2_R.vertices))];
 vvW2_R = h(1:3, :)';
 
-HS0_L = [-1 0 0 355; 0 -1 0 -45; 0 0 1 58; 0 0 0 1];
+H = H * HEND;
+HEndEff = zeros(2,3);
+HEndEff(1,:) = H(1:3, end)';
+
 h = HS0_L * [vS0_L.vertices'; ones(1,length(vS0_L.vertices))];
 vvS0_L = h(1:3, :)';
 
@@ -231,6 +225,8 @@ vvW1_L = h(1:3, :)';
 H = H * HW2;
 h = H * [vW2_L.vertices'; ones(1,length(vW2_L.vertices))];
 vvW2_L = h(1:3, :)';
+H = H * HEND;
+HEndEff(2, :) = H(1:3, end)';
 
 set(hS0_R, 'Vertices', vvS0_R);
 set(hS1_R, 'Vertices', vvS1_R);
@@ -248,3 +244,30 @@ set(hE1_L, 'Vertices', vvE1_L);
 set(hW0_L, 'Vertices', vvW0_L);
 set(hW1_L, 'Vertices', vvW1_L);
 set(hW2_L, 'Vertices', vvW2_L);
+set(htextLeft, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(2, 1), HEndEff(2, 2), HEndEff(2, 3)));
+set(htextRight, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(1, 1), HEndEff(1, 2), HEndEff(1, 3)));
+
+% --- Executes during object creation, after setting all properties.
+function textLeft_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to textLeft (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+global HEndEff; global htextLeft;
+htextLeft = hObject;
+s = size(HEndEff);
+if s(1) >= 2
+set(hObject, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(2, 1), HEndEff(2, 2), HEndEff(2, 3)));
+end
+
+
+% --- Executes during object creation, after setting all properties.
+function textRight_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to textRight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+global HEndEff; global htextRight;
+htextRight = hObject;
+s = size(HEndEff);
+if s(1) >= 2
+set(hObject, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(1, 1), HEndEff(1, 2), HEndEff(1, 3)));
+end
