@@ -6,7 +6,7 @@ class project for study the [baxter robot](http://www.rethinkrobotics.com/baxter
 
 ## Screenshot
 ![Forward Kinematics](https://lh3.googleusercontent.com/1gf-nzUGw45Dw5GR0QsQmmgQ2Ac7KzDvq5Y99Ht3IOc=w918-h478-no)
-![Inverse Kinematics](https://lh3.googleusercontent.com/Z0-7fe58S5orRWIbve9zhxg7LSf0Vf8b4nT2eashRck=w918-h478-no)
+![Inverse Kinematics](https://lh3.googleusercontent.com/Ltkt8hwM-R570adVBE5rLlPuUkBLlZutC1KcWrPFiTc=w919-h493-no)
 ![Workspace](https://lh3.googleusercontent.com/kDsJanWmEx026nzxxuWPvcv2biOgc7Kk2UsuzhF5RGA=w911-h492-no)
 
 ## Additional file
