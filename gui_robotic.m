@@ -461,7 +461,7 @@ for joint = 1:7
     h = H * [vS1_R.vertices'; ones(1,length(vS1_R.vertices))];
     vvS1_R = h(1:3, :)';
 
-    H = H * HE0 * [rotz(theta_R(3)) [0;0;0]; 0 0 0 1];
+    H = H * HE0 * [rotz(-theta_R(3)) [0;0;0]; 0 0 0 1];
     h = H * [vE0_R.vertices'; ones(1,length(vE0_R.vertices))];
     vvE0_R = h(1:3, :)';
 
@@ -469,7 +469,7 @@ for joint = 1:7
     h = H * [vE1_R.vertices'; ones(1,length(vE1_R.vertices))];
     vvE1_R = h(1:3, :)';
 
-    H = H * HW0 * [rotz(theta_R(5)) [0;0;0]; 0 0 0 1];
+    H = H * HW0 * [rotz(-theta_R(5)) [0;0;0]; 0 0 0 1];
     h = H * [vW0_R.vertices'; ones(1,length(vW0_R.vertices))];
     vvW0_R = h(1:3, :)';
 
@@ -477,7 +477,7 @@ for joint = 1:7
     h = H * [vW1_R.vertices'; ones(1,length(vW1_R.vertices))];
     vvW1_R = h(1:3, :)';
 
-    H = H * HW2 * [rotz(theta_R(7)) [0;0;0]; 0 0 0 1];
+    H = H * HW2 * [rotz(-theta_R(7)) [0;0;0]; 0 0 0 1];
     h = H * [vW2_R.vertices'; ones(1,length(vW2_R.vertices))];
     vvW2_R = h(1:3, :)';
     H = H * HEND;
@@ -500,6 +500,7 @@ end
 %save data
 data.theta_L = theta_L;
 data.theta_R = theta_R;
+guidata(hObject, data);
 
 elseif mode == 2 % inverse kinematics mode
   lx = str2double(get(handles.editlx, 'String'));
@@ -512,363 +513,344 @@ elseif mode == 2 % inverse kinematics mode
   set(hTarget(1), 'XData', lx, 'YData', ly, 'ZData', lz);
   set(hTarget(2), 'XData', rx, 'YData', ry, 'ZData', rz);
   
-  % Inverse Kinamatics: CCD with Triangulation
-  % Ref: R. Muller-Cajar and R. Mukundan. 2007. Triangulation: A new algorithm
-  % for Inverse Kinematics. University of Canterbury. New Zealand
+  % Inverse Kinematics: Jacobian Transpose Method
+  % Ref: Welman C. (1989). Inverse Kinematics and Geometric Constraints for
+  % Articulated Figure Manipulation. Simon Fraser University. Canada
   
   %% Left arm
   if enable_L
-  p_target = [lx ly lz];
-  C = zeros(7, 3); % store c vector of each joint for target direction
+  q = itheta_L';
+  p_target = [lx ly lz 0 0 1];
   P = zeros(8, 3); % store position vector (p) of each joint
+  axis = zeros(7,3);
+  
+  % pre calcular end-effector position/orientation
   H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1];
   P(1, :) = H(1:3, end)';
+  axis(1,:) = H(1:3, 3)';
   H = H * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1];
   P(2, :) = H(1:3, end)';
+  axis(2,:) = H(1:3, 2)';
   H = H * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1];
   P(3, :) = H(1:3, end)';
+  axis(3,:) = H(1:3, 1)';
   H = H * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1];
   P(4, :) = H(1:3, end)';
+  axis(4,:) = H(1:3, 2)';
   H = H * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1];
   P(5, :) = H(1:3, end)';
+  axis(5,:) = H(1:3, 1)';
   H = H * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1];
   P(6, :) = H(1:3, end)';
-  H = H * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
+  axis(6,:) = H(1:3, 2)';
+  H = H * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1];
   P(7, :) = H(1:3, end)';
+  axis(7,:) = H(1:3, 1)';
+  H = H * HEND;
   P(8, :) = H(1:3, end)';
   
-  C = ones(8,1) * p_target - P;
-  joint = 7;
+  p_end = [H(1:3, end)' H(1:3,3)'];
+  err_L = norm(p_end(1:3) - p_target(1:3));
+  
+  % Length of each joint
+  L = [norm(P(2,:) - P(1, :)) norm(P(3,:) - P(2, :)) norm(P(4,:) - P(3, :))...
+      norm(P(5,:) - P(4, :)) norm(P(6,:) - P(5, :)) norm(P(7,:) - P(6, :))...
+      norm(P(8,:) - P(7, :))];
+  % stiffness
+  alpha = .1 * ones(1,7);
+  step_h = 0.1;
+  Fi = 1;
+   
+  % numerical loop
   iter_L = 0;
-  stiff = 1;
-  alpha = 1;
-  err_L = norm(P(7,:)-p_target);
+  % create progressbar
+  hProgress = waitbar(0, '', 'Name', 'Left Arm IK', ...
+    'CreateCancelBtn', 'setappdata(gcbf, ''isCancel'', 1);');
+  setappdata(hProgress, 'isCancel', 0);
   while err_L > 0.01
-    if  err_L < 10
-      stiff = 0.1;
-    elseif err_L < 50
-      stiff = 0.25;
-    elseif err_L < 200
-      stiff = 0.5;
+    
+    if getappdata(hProgress, 'isCancel')
+      break;
     end
-    joint = joint - 1;
-    if joint < 1
-      joint = 6;
-    end
+    
     iter_L = iter_L + 1;
     if iter_L > 10000
       break;
-    end
-      
-    a_vector = P(8, :) - P(joint, :);
-    c_vector = C(joint, :);
-    
-    a = norm(a_vector);
-    c = norm(c_vector);
-   
-    axis = [0 0 0];
-    if joint == 1
-      axis = [0 0 1];
-    elseif joint == 2 || joint == 4 || joint == 6
-      axis = [0 1 0];
-    elseif joint == 3 || joint == 5 || joint == 7
-      axis = [1 0 0];
+    else
+      waitbar(iter_L/10000, hProgress, sprintf('error: %.4f', err_L));
     end
     
-    wp = 1;
-    k1 = wp * (c_vector * axis') * (a_vector * axis');
-    k2 = wp * (a_vector * c_vector');
-    k3 = axis * (wp * cross(a_vector, c_vector)');
-    theta = atand(k3 / (k2 - k1));
-    theta_1 = theta + 180;
-    theta_2 = theta - 180;
     
-    old_theta = itheta_L(joint);
-    itheta_L(joint) = itheta_L(joint) + stiff * theta;
-    H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end0 = H(1:3, end)';
-    itheta_L(joint) = old_theta;
-    
-    if theta_1 > -180 && theta_1 < 180
-      old_theta = itheta_L(joint);
-      itheta_L(joint) = itheta_L(joint) + stiff * theta_1;
-      H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end = H(1:3, end)';
-      if norm(p_target - p_end) < norm(p_target - p_end0)
-        p_end0 = p_end;
-        theta = theta_1;
-      end
-    itheta_L(joint) = old_theta;
-    end
-    if theta_2 > -180 && theta_2 < 180
-      old_theta = itheta_L(joint);
-      itheta_L(joint) = itheta_L(joint) + stiff * theta_2;
-      H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end = H(1:3, end)';
-      if norm(p_target - p_end) < norm(p_target - p_end0)
-        p_end0 = p_end;
-        theta = theta_2;
-      end
-      itheta_L(joint) = old_theta;
+    if err_L < 1
+      alpha = ones(1,7);
+      step_h = 0.05;
+    elseif err_L < 20
+      alpha = .5 * ones(1,7);
+      step_h = 0.08;
     end
     
-    % Convergenece Checkpoint
-    div_err = norm(p_target - p_end0) - err_L;
-    if div_err > 0
-      stiff = 0.005;
-    end
-    
-    % Update each joint with theta
-    itheta_L(joint) = itheta_L(joint) + stiff * theta;
-    
-    if itheta_L(1) > 51
-      itheta_L(1) = 51;
-    elseif itheta_L(1) < -141
-      itheta_L(1) = -141;
-    elseif itheta_L(2) > 30
-      itheta_L(2) = 30;
-    elseif itheta_L(2) < -100
-      itheta_L(2) = -100;
-    elseif itheta_L(3) > 173.5
-      itheta_L(3) = 173.5;
-    elseif itheta_L(3) < -173.5
-      itheta_L(3) = -173.5;
-    elseif itheta_L(4) > 80
-      itheta_L(4) = 80;
-    elseif itheta_L(4) < -3
-      itheta_L(4) = -3;
-    elseif itheta_L(5) > 175.25
-      itheta_L(5) = 175.25;
-    elseif itheta_L(5) < -175.25
-      itheta_L(5) = -175.25;
-    elseif itheta_L(6) > 120
-      itheta_L(6) = 120;
-    elseif itheta_L(6) < -90
-      itheta_L(6) = -90;
-    elseif itheta_L(7) > 175.25
-      itheta_L(7) = 175.25;
-    elseif itheta_L(7) < -175.25
-      itheta_L(7) = -175.25;
-    end
-    
-    % update kinametics
-    H = HS0_L * [rotz(itheta_L(1)) [0;0;0]; 0 0 0 1];
-    P(1, :) = H(1:3, end)';
-    H = H * HS1 * [roty(itheta_L(2)) [0;0;0]; 0 0 0 1];
-    P(2, :) = H(1:3, end)';
-    H = H * HE0 * [rotz(itheta_L(3)) [0;0;0]; 0 0 0 1];
-    P(3, :) = H(1:3, end)';
-    H = H * HE1 * [roty(itheta_L(4)) [0;0;0]; 0 0 0 1];
-    P(4, :) = H(1:3, end)';
-    H = H * HW0 * [rotz(itheta_L(5)) [0;0;0]; 0 0 0 1];
-    P(5, :) = H(1:3, end)';
-    H = H * HW1 * [roty(itheta_L(6)) [0;0;0]; 0 0 0 1];
-    P(6, :) = H(1:3, end)';
-    H = H * HW2 * [rotz(itheta_L(7)) [0;0;0]; 0 0 0 1] * HEND;
-    P(7, :) = H(1:3, end)';
-    P(8, :) = H(1:3, end)';
+    J = [cross((P(8,:) - P(1,:)), axis(1, :))' cross((P(8,:) - P(2,:)), axis(2, :))' ...
+      cross((P(8,:) - P(3,:)), axis(3, :))' cross((P(8,:) - P(4,:)), axis(4, :))' ...
+      cross((P(8,:) - P(5,:)), axis(5, :))' cross((P(8,:) - P(6,:)), axis(6, :))' ...
+      cross((P(8,:) - P(7,:)), axis(7, :))'; ...
+      axis(1, :)' axis(2, :)' axis(3, :)' axis(4, :)' axis(5, :)' axis(6, :)' axis(7, :)'];
+    K = 1 ./ (L.*alpha);
+    F = Fi .* (p_end - p_target)';
+    delta_q = K' .* (J'*F);
+    new_q = q + step_h * delta_q;
 
-    C = ones(8,1) * p_target - P;
-    % update error
-    err_L = norm(P(7,:)-p_target);
+    H = HS0_L * [rotz(new_q(1)) [0;0;0]; 0 0 0 1] ...
+      * HS1 * [roty(new_q(2)) [0;0;0]; 0 0 0 1] ...
+      * HE0 * [rotz(new_q(3)) [0;0;0]; 0 0 0 1] ...
+      * HE1 * [roty(new_q(4)) [0;0;0]; 0 0 0 1] ...
+      * HW0 * [rotz(new_q(5)) [0;0;0]; 0 0 0 1] ...
+      * HW1 * [roty(new_q(6)) [0;0;0]; 0 0 0 1] ...
+      * HW2 * [rotz(new_q(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = [H(1:3, end)' H(1:3,3)'];
+    new_err = norm(p_end(1:3) - p_target(1:3));
+    
+    % convergence checkout
+    if new_err > err_L
+      q = q + step_h * 0.005 * delta_q;
+    else
+      q = q + step_h * delta_q;
+    end
+    
+    
+    
+    if q(1) > 51
+      q(1) = 51;
+    elseif q(1) < -141
+      q(1) = -141;
+    end
+    if q(2) > 30
+      q(2) = 30;
+    elseif q(2) < -100
+      q(2) = -100;
+    end
+    if q(3) > 173.5
+      q(3) = 173.5;
+    elseif q(3) < -173.5
+      q(3) = -173.5;
+    end
+    if q(4) > 80
+      q(4) = 80;
+    elseif q(4) < -3
+      q(4) = -3;
+    end
+    if q(5) > 175.25
+      q(5) = 175.25;
+    elseif q(5) < -175.25
+      q(5) = -175.25;
+    end
+    if q(6) > 120
+      q(6) = 120;
+    elseif q(6) < -90
+      q(6) = -90;
+    end
+    if q(7) > 175.25
+      q(7) = 175.25;
+    elseif q(7) < -175.25
+      q(7) = -175.25;
+    end
+    
+    H = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
+    P(1, :) = H(1:3, end)';
+    axis(1,:) = H(1:3, 3)';
+    H = H * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
+    P(2, :) = H(1:3, end)';
+    axis(2,:) = H(1:3, 2)';
+    H = H * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
+    P(3, :) = H(1:3, end)';
+    axis(3,:) = H(1:3, 1)';
+    H = H * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
+    P(4, :) = H(1:3, end)';
+    axis(4,:) = H(1:3, 2)';
+    H = H * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
+    P(5, :) = H(1:3, end)';
+    axis(5,:) = H(1:3, 1)';
+    H = H * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
+    P(6, :) = H(1:3, end)';
+    axis(6,:) = H(1:3, 2)';
+    H = H * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
+    P(7, :) = H(1:3, end)';
+    axis(7,:) = H(1:3, 1)';
+    H = H * HEND;
+    P(8, :) = H(1:3, end)';
+    p_end = [H(1:3, end)' H(1:3,3)'];
+    err_L = norm(p_end(1:3) - p_target(1:3));
   end
-  data.itheta_L = itheta_L;
- 
+    delete(hProgress);
+    itheta_L = q';
+    data.itheta_L = q';
   end
-  %% for Right arm
+  
+  %% Right arm
   if enable_R
-  p_target = [rx ry rz];
-  C = zeros(7, 3); % store c vector of each joint for target direction
+  q = [-1 1 -1 1 -1 1 -1] .* itheta_R';
+  p_target = [-rx ry rz 0 0 1];
   P = zeros(8, 3); % store position vector (p) of each joint
-  H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1];
+  axis = zeros(7,3);
+  
+  % pre calcular end-effector position/orientation
+  H = HS0_L * [rotz(itheta_R(1)) [0;0;0]; 0 0 0 1];
   P(1, :) = H(1:3, end)';
+  axis(1,:) = H(1:3, 3)';
   H = H * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1];
   P(2, :) = H(1:3, end)';
+  axis(2,:) = H(1:3, 2)';
   H = H * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1];
   P(3, :) = H(1:3, end)';
+  axis(3,:) = H(1:3, 1)';
   H = H * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1];
   P(4, :) = H(1:3, end)';
+  axis(4,:) = H(1:3, 2)';
   H = H * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1];
   P(5, :) = H(1:3, end)';
+  axis(5,:) = H(1:3, 1)';
   H = H * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1];
   P(6, :) = H(1:3, end)';
-  H = H * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
+  axis(6,:) = H(1:3, 2)';
+  H = H * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1];
   P(7, :) = H(1:3, end)';
+  axis(7,:) = H(1:3, 1)';
+  H = H * HEND;
   P(8, :) = H(1:3, end)';
   
-  C = ones(8,1) * p_target - P;
-  joint = 7;
+  p_end = [H(1:3, end)' H(1:3,3)'];
+  err_R = norm(p_end(1:3) - p_target(1:3));
+  
+  % Length of each joint
+  L = [norm(P(2,:) - P(1, :)) norm(P(3,:) - P(2, :)) norm(P(4,:) - P(3, :))...
+      norm(P(5,:) - P(4, :)) norm(P(6,:) - P(5, :)) norm(P(7,:) - P(6, :))...
+      norm(P(8,:) - P(7, :))];
+  % stiffness
+  alpha = .1 * ones(1,7);
+  Fi = 1;
+   
+  % numerical loop
   iter_R = 0;
-  stiff = 1;
-  err_R = norm(P(7,:)-p_target);
+  % create progressbar
+  hProgress = waitbar(0, '', 'Name', 'Right Arm IK', ...
+    'CreateCancelBtn', 'setappdata(gcbf, ''isCancel'', 1);');
+  setappdata(hProgress, 'isCancel', 0);
   while err_R > 0.01
-    if  err_R < 10
-      stiff = 0.1;
-    elseif err_R < 50
-      stiff = 0.25;
-    elseif err_R < 200
-      stiff = 0.5;
-    end
-    joint = joint - 1;
-    if joint < 1
-      joint = 6;
-    end
+    
     iter_R = iter_R + 1;
-    if iter_R > 10000
+    if getappdata(hProgress, 'isCancel')
       break;
     end
-      
-    a_vector = P(8, :) - P(joint, :);
-    c_vector = C(joint, :);
-    
-    a = norm(a_vector);
-    c = norm(c_vector);
-   
-    axis = [0 0 0];
-    if joint == 1
-      axis = [0 0 1];
-    elseif joint == 2 || joint == 4 || joint == 6
-      axis = [0 1 0];
-    elseif joint == 3 || joint == 5 || joint == 7
-      axis = [1 0 0];
+    if iter_R > 10000
+      break;
+    else
+      waitbar(iter_R/10000, hProgress, sprintf('error: %.4f', err_R));
     end
     
-    k1 = (c_vector * axis') * (a_vector * axis');
-    k2 = a_vector * c_vector';
-    k3 = axis * cross(a_vector, c_vector)';
-    theta = atand(k3 / (k2 - k1));
-    theta_1 = theta + 180;
-    theta_2 = theta - 180;
     
-    % select the best theta
-    old_theta = itheta_R(joint);
-    itheta_R(joint) = itheta_R(joint) + stiff * theta;
-    H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end0 = H(1:3, end)';
-    itheta_R(joint) = old_theta;
-    
-    if theta_1 > -180 && theta_1 < 180
-      old_theta = itheta_R(joint);
-      itheta_R(joint) = itheta_R(joint) + stiff * theta_1;
-      H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end = H(1:3, end)';
-      if norm(p_target - p_end) < norm(p_target - p_end0)
-        p_end0 = p_end;
-        theta = theta_1;
-      end
-    itheta_R(joint) = old_theta;
-    end
-    if theta_2 > -180 && theta_2 < 180
-      old_theta = itheta_R(joint);
-      itheta_R(joint) = itheta_R(joint) + stiff * theta_2;
-      H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1] ...
-    * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1] ...
-    * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1] ...
-    * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1] ...
-    * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1] ...
-    * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1] ...
-    * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
-    p_end = H(1:3, end)';
-      if norm(p_target - p_end) < norm(p_target - p_end0)
-        theta = theta_2;
-        p_end0 = p_end;
-      end
-      itheta_R(joint) = old_theta;
+    if err_R < 0.1
+      step_h = 0.05;
+    elseif err_R < 50
+      step_h = 0.09;
+    else
+      step_h = 0.1;
     end
     
-    % Convergenece Checkpoint
-    div_err = norm(p_target - p_end0) - err_R;
-    if div_err > 0
-      stiff = 0.005;
-    end
-    
-    % update each joint with theta
-    itheta_R(joint) = itheta_R(joint) + stiff * theta;
-    
-    if itheta_R(1) > 51
-      itheta_R(1) = 51;
-    elseif itheta_R(1) < -141
-      itheta_R(1) = -141;
-    elseif itheta_R(2) > 30
-      itheta_R(2) = 30;
-    elseif itheta_R(2) < -100
-      itheta_R(2) = -100;
-    elseif itheta_R(3) > 173.5
-      itheta_R(3) = 173.5;
-    elseif itheta_R(3) < -173.5
-      itheta_R(3) = -173.5;
-    elseif itheta_R(4) > 80
-      itheta_R(4) = 80;
-    elseif itheta_R(4) < -3
-      itheta_R(4) = -3;
-    elseif itheta_R(5) > 175.25
-      itheta_R(5) = 175.25;
-    elseif itheta_R(5) < -175.25
-      itheta_R(5) = -175.25;
-    elseif itheta_R(6) > 120
-      itheta_R(6) = 120;
-    elseif itheta_R(6) < -90
-      itheta_R(6) = -90;
-    elseif itheta_R(7) > 175.25
-      itheta_R(7) = 175.25;
-    elseif itheta_R(7) < -175.25
-      itheta_R(7) = -175.25;
-    end
-    
-    % update kinametics
-    H = HS0_R * [rotz(-itheta_R(1)) [0;0;0]; 0 0 0 1];
-    P(1, :) = H(1:3, end)';
-    H = H * HS1 * [roty(itheta_R(2)) [0;0;0]; 0 0 0 1];
-    P(2, :) = H(1:3, end)';
-    H = H * HE0 * [rotz(itheta_R(3)) [0;0;0]; 0 0 0 1];
-    P(3, :) = H(1:3, end)';
-    H = H * HE1 * [roty(itheta_R(4)) [0;0;0]; 0 0 0 1];
-    P(4, :) = H(1:3, end)';
-    H = H * HW0 * [rotz(itheta_R(5)) [0;0;0]; 0 0 0 1];
-    P(5, :) = H(1:3, end)';
-    H = H * HW1 * [roty(itheta_R(6)) [0;0;0]; 0 0 0 1];
-    P(6, :) = H(1:3, end)';
-    H = H * HW2 * [rotz(itheta_R(7)) [0;0;0]; 0 0 0 1] * HEND;
-    P(7, :) = H(1:3, end)';
-    P(8, :) = H(1:3, end)';
+    J = [cross((P(8,:) - P(1,:)), axis(1, :))' cross((P(8,:) - P(2,:)), axis(2, :))' ...
+      cross((P(8,:) - P(3,:)), axis(3, :))' cross((P(8,:) - P(4,:)), axis(4, :))' ...
+      cross((P(8,:) - P(5,:)), axis(5, :))' cross((P(8,:) - P(6,:)), axis(6, :))' ...
+      cross((P(8,:) - P(7,:)), axis(7, :))'; ...
+      axis(1, :)' axis(2, :)' axis(3, :)' axis(4, :)' axis(5, :)' axis(6, :)' axis(7, :)'];
+    K = 1 ./ (L.*alpha);
+    F = Fi .* (p_end - p_target)';
+    delta_q = K' .* (J'*F);
+    new_q = q + step_h * delta_q;
 
-    C = ones(8,1) * p_target - P;
-    % update error
-    err_R = norm(P(7,:)-p_target);
+    H = HS0_R * [rotz(new_q(1)) [0;0;0]; 0 0 0 1] ...
+      * HS1 * [roty(new_q(2)) [0;0;0]; 0 0 0 1] ...
+      * HE0 * [rotz(new_q(3)) [0;0;0]; 0 0 0 1] ...
+      * HE1 * [roty(new_q(4)) [0;0;0]; 0 0 0 1] ...
+      * HW0 * [rotz(new_q(5)) [0;0;0]; 0 0 0 1] ...
+      * HW1 * [roty(new_q(6)) [0;0;0]; 0 0 0 1] ...
+      * HW2 * [rotz(new_q(7)) [0;0;0]; 0 0 0 1] * HEND;
+    p_end = [H(1:3, end)' H(1:3,3)'];
+    new_err = norm(p_end(1:3) - p_target(1:3));
+    
+    % convergence checkout
+    if new_err > err_R
+      q = q + step_h * 0.005 * delta_q;
+      % run CCD
+      % delete(hProgress);
+      %q = ik_ccd(p_target, q, 'right');
+    else
+      q = q + step_h * delta_q;
+    end
+    
+    if q(1) > 51
+      q(1) = 51;
+    elseif q(1) < -141
+      q(1) = -141;
+    end
+    if q(2) > 30
+      q(2) = 30;
+    elseif q(2) < -100
+      q(2) = -100;
+    end
+    if q(3) > 173.5
+      q(3) = 173.5;
+    elseif q(3) < -173.5
+      q(3) = -173.5;
+    end
+    if q(4) > 80
+      q(4) = 80;
+    elseif q(4) < -3
+      q(4) = -3;
+    end
+    if q(5) > 175.25
+      q(5) = 175.25;
+    elseif q(5) < -175.25
+      q(5) = -175.25;
+    end
+    if q(6) > 120
+      q(6) = 120;
+    elseif q(6) < -90
+      q(6) = -90;
+    end
+    if q(7) > 175.25
+      q(7) = 175.25;
+    elseif q(7) < -175.25
+      q(7) = -175.25;
+    end
+    
+    H = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
+    P(1, :) = H(1:3, end)';
+    axis(1,:) = H(1:3, 3)';
+    H = H * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
+    P(2, :) = H(1:3, end)';
+    axis(2,:) = H(1:3, 2)';
+    H = H * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
+    P(3, :) = H(1:3, end)';
+    axis(3,:) = H(1:3, 1)';
+    H = H * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
+    P(4, :) = H(1:3, end)';
+    axis(4,:) = H(1:3, 2)';
+    H = H * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
+    P(5, :) = H(1:3, end)';
+    axis(5,:) = H(1:3, 1)';
+    H = H * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
+    P(6, :) = H(1:3, end)';
+    axis(6,:) = H(1:3, 2)';
+    H = H * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
+    P(7, :) = H(1:3, end)';
+    axis(7,:) = H(1:3, 1)';
+    H = H * HEND;
+    P(8, :) = H(1:3, end)';
+    p_end = [H(1:3, end)' H(1:3,3)'];
+    err_R = norm(p_end(1:3) - p_target(1:3));
   end
-  data.itheta_R = itheta_R;
-  end
-  
+    delete(hProgress);
+    itheta_R = q';
+    data.itheta_R = q';
+  end 
   %% Post Processing
   % If right arm found IK solution; render animation
   if enable_L % && err_L < 0.1
@@ -933,7 +915,7 @@ elseif mode == 2 % inverse kinematics mode
       set(hW2_L, 'Vertices', vvW2_L);
       set(htextLeft, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(2, 1), HEndEff(2, 2), HEndEff(2, 3)));
       % delay
-      pause(0.0001);
+      pause(0.00001);
     end
   end
   data.theta_L = theta_L;
@@ -948,7 +930,7 @@ elseif mode == 2 % inverse kinematics mode
   set(handles.edit19, 'String', num2str(itheta_R(5)));
   set(handles.edit20, 'String', num2str(itheta_R(6)));
   set(handles.edit21, 'String', num2str(itheta_R(7)));
-  target_R = itheta_R;
+  target_R = [-1 1 -1 1 -1 1 -1] .* itheta_R;
   for joint = 1:7
   while theta_R(joint) ~= target_R(joint)
     if abs(theta_R(joint) - target_R(joint)) < 0.5
@@ -960,7 +942,7 @@ elseif mode == 2 % inverse kinematics mode
         theta_R(joint) = theta_R(joint) + 0.5;
       end
     end
-    H = HS0_R * [rotz(-theta_R(1)) [0;0;0]; 0 0 0 1];
+    H = HS0_R * [rotz(theta_R(1)) [0;0;0]; 0 0 0 1];
     h = H * [vS0_R.vertices'; ones(1,length(vS0_R.vertices))];
     vvS0_R = h(1:3, :)';
 
@@ -1000,8 +982,8 @@ elseif mode == 2 % inverse kinematics mode
     set(hW2_R, 'Vertices', vvW2_R);
     set(htextRight, 'String', sprintf('(%.4f, %.4f, %.4f)', HEndEff(1, 1), HEndEff(1, 2), HEndEff(1, 3)));
     % delay
-    pause(0.0001);
-    end
+    pause(0.00001);
+  end
   end
   data.theta_R = theta_R;
   end 
@@ -1016,90 +998,7 @@ elseif mode == 2 % inverse kinematics mode
     sprintf('error: %f', err_R) ...
     }, 'Result');
   end
-  % Jacobian Transpose method
-  % Calculate Xd Xc
-  % q is theta vector of each join
-  %{
-  q = theta_L';
-  Pd = [lx ly lz 0 0 1];
-  Pj = zeros(8,3);
-  axes = zeros(8,3);
-  Hc = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
-  Pj(1,:) = Hc(1:3, end)';
-  axes(1,:) = Hc(1:3, 3);
-  Hc = Hc * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
-  Pj(2,:) = Hc(1:3, end)';
-  axes(2,:) = Hc(1:3, 2);
-  Hc = Hc * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
-  Pj(3,:) = Hc(1:3, end)';
-  axes(3,:) = Hc(1:3, 3);
-  Hc = Hc * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
-  Pj(4,:) = Hc(1:3, end)';
-  axes(4,:) = Hc(1:3, 2);
-  Hc = Hc * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
-  Pj(5,:) = Hc(1:3, end)';
-  axes(5,:) = Hc(1:3, 3);
-  Hc = Hc * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
-  Pj(6,:) = Hc(1:3, end)';
-  axes(6,:) = Hc(1:3, 2);
-  Hc = Hc * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
-  Pj(7,:) = Hc(1:3, end)';
-  Pj(8,:) = Hc(1:3, end)';
-  axes(7,:) = Hc(1:3, 3);
-  axes(8,:) = Hc(1:3, 3);
   
-  Pc = [Hc(1,end) Hc(2,end) Hc(3,end) Hc(1,3) Hc(2,3) Hc(3,3)];
-  F = 0.01 * (Pd - Pc);
-  iter = 0;
-  h = 1;
-  while any(F > 1e-3)
-  iter = iter + 1;
-  if iter > 10000
-    fprintf('no solution with in %d iterations\n', iter);
-    break;
-  end
-  J = [cross(Pj(7,:)-Pj(1,:), axes(1,:))' cross(Pj(7,:)-Pj(2,:), axes(2,:))' cross(Pj(7,:)-Pj(3,:), axes(3,:))' ...
-    cross(Pj(7,:)-Pj(4,:), axes(4,:))' cross(Pj(7,:)-Pj(5,:), axes(5,:))' cross(Pj(7,:)-Pj(6,:), axes(6,:))' ...
-    cross(Pj(7,:)-Pj(7,:), axes(7,:))'; ...
-    axes(1,:)' axes(2,:)' axes(3,:)' axes(4,:)' axes(5,:)' axes(6,:)' axes(7,:)']
-  L = diff(Pj);
-  alpha = [1 2 10 3 10 3 20];
-  alpha = alpha ./ sum(alpha);
-  K = 1 ./ [norm(L(1,:))*alpha(1) norm(L(2,:))*alpha(2) norm(L(3,:))*alpha(3) ...
-    norm(L(4,:))*alpha(4) norm(L(5,:))*alpha(5) norm(L(6,:))*alpha(6) 100*alpha(7)]'
-  delta_q = K .* (J'*F');
-  h = h * (1e-3/norm(F))^(.2);
-  q = q + h * delta_q;
-  break;
-  Hc = HS0_L * [rotz(q(1)) [0;0;0]; 0 0 0 1];
-  Pj(1,:) = Hc(1:3, end)';
-  axes(1,:) = Hc(1:3, 3);
-  Hc = Hc * HS1 * [roty(q(2)) [0;0;0]; 0 0 0 1];
-  Pj(2,:) = Hc(1:3, end)';
-  axes(2,:) = Hc(1:3, 2);
-  Hc = Hc * HE0 * [rotz(q(3)) [0;0;0]; 0 0 0 1];
-  Pj(3,:) = Hc(1:3, end)';
-  axes(3,:) = Hc(1:3, 3);
-  Hc = Hc * HE1 * [roty(q(4)) [0;0;0]; 0 0 0 1];
-  Pj(4,:) = Hc(1:3, end)';
-  axes(4,:) = Hc(1:3, 2);
-  Hc = Hc * HW0 * [rotz(q(5)) [0;0;0]; 0 0 0 1];
-  Pj(5,:) = Hc(1:3, end)';
-  axes(5,:) = Hc(1:3, 3);
-  Hc = Hc * HW1 * [roty(q(6)) [0;0;0]; 0 0 0 1];
-  Pj(6,:) = Hc(1:3, end)';
-  axes(6,:) = Hc(1:3, 2);
-  Hc = Hc * HW2 * [rotz(q(7)) [0;0;0]; 0 0 0 1];
-  Pj(7,:) = Hc(1:3, end)';
-  Pj(8,:) = Hc(1:3, end)';
-  axes(7,:) = Hc(1:3, 3);
-  axes(8,:) = Hc(1:3, 3);
-  
-  Pc = [Hc(1,end) Hc(2,end) Hc(3,end) Hc(1,3) Hc(2,3) Hc(3,3)];
-  F = Pd - Pc;
-  end
-  q
-  %}
 end
 
 set(hObject, 'Enable', 'on');
