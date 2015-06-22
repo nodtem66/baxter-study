@@ -687,7 +687,7 @@ elseif mode == 2 % inverse kinematics mode
   
   %% Right arm
   if enable_R
-  q = [-1 1 -1 1 -1 1 -1] .* itheta_R';
+  q = ([-1 1 -1 1 -1 1 -1] .* itheta_R)';
   p_target = [-rx ry rz 0 0 1];
   P = zeros(8, 3); % store position vector (p) of each joint
   axis = zeros(7,3);
